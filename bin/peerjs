@@ -37,11 +37,13 @@ const opts = yargs
     },
     sslkey: {
       demandOption: false,
-      describe: "path to SSL key"
+      describe: "path to SSL key",    
+      default: "/usr/local/bnids/cert/_wildcard_.hparking.co.kr_201911276PT6.key.pem"
     },
     sslcert: {
       demandOption: false,
-      describe: "path to SSL certificate"
+      describe: "path to SSL certificate",
+      default: "/usr/local/bnids/cert/_wildcard_.hparking.co.kr_201911276PT6.crt.pem",
     },
     host: {
       demandOption: false,
@@ -81,6 +83,10 @@ if (opts.sslkey || opts.sslcert) {
       key: fs.readFileSync(path.resolve(opts.sslkey)),
       cert: fs.readFileSync(path.resolve(opts.sslcert))
     };
+
+    console.log("ssl 정보 불러오기 성공!!! ");
+    console.log(`---> opts.sslkey ${opts.sslkey}`);
+    console.log(`---> opts.sslcert ${opts.sslcert}`);
 
     delete opts.sslkey;
     delete opts.sslcert;
