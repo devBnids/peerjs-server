@@ -8,6 +8,53 @@ const optimistUsageLength = 98;
 const yargs = require("yargs");
 const version = pkg.version;
 const { PeerServer } = require("../dist/src");
+// const tools = require('../config/winston.mjs');
+
+const winston = require("winston");
+const winstonDaily = require("winston-daily-rotate-file");
+
+const logDir = '/usr/local/bnids/logs';  // logs 디렉토리 하위에 로그 파일 저장
+const { combine, timestamp, printf } = winston.format;
+
+// Define log format
+const logFormat = printf(info => {
+  return `${info.timestamp} ${info.level}: ${info.message}`;
+});
+
+/*
+ * Log Level
+ * error: 0, warn: 1, info: 2, http: 3, verbose: 4, debug: 5, silly: 6
+ */
+const logger = winston.createLogger({
+  format: combine(
+    timestamp({
+      format: 'YYYY-MM-DD HH:mm:ss',
+    }),
+    logFormat,
+  ),
+  transports: [
+    new winstonDaily({
+      level: 'error',
+      datePattern: 'YYYYMMDD',
+      dirname: logDir,
+      filename: `peerjs-server-%DATE%.log`,
+      maxFiles: 30,  // 30일치 로그 파일 저장
+      zippedArchive: true, 
+    }),
+
+  ],
+});
+
+// Production 환경이 아닌 경우(dev 등) 
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),  // 색깔 넣어서 출력
+      winston.format.simple(),  // `${info.level}: ${info.message} JSON.stringify({ ...rest })` 포맷으로 출력
+    )
+  }));
+}
+
 const opts = yargs
   .usage("Usage: $0")
   .wrap(Math.min(optimistUsageLength, yargs.terminalWidth()))
@@ -74,7 +121,7 @@ const opts = yargs
   .argv;
 
 process.on("uncaughtException", function (e) {
-  console.error("Error: " + e);
+  logger.error("Error: " + e);
 });
 
 if (opts.sslkey || opts.sslcert) {
@@ -84,14 +131,14 @@ if (opts.sslkey || opts.sslcert) {
       cert: fs.readFileSync(path.resolve(opts.sslcert))
     };
 
-    console.log("ssl 정보 불러오기 성공!!! ");
-    console.log(`---> opts.sslkey ${opts.sslkey}`);
-    console.log(`---> opts.sslcert ${opts.sslcert}`);
+    logger.info("ssl 정보 불러오기 성공!!! ");
+    logger.info(`---> opts.sslkey ${opts.sslkey}`);
+    logger.info(`---> opts.sslcert ${opts.sslcert}`);
 
     delete opts.sslkey;
     delete opts.sslcert;
   } else {
-    console.error("Warning: PeerServer will not run because either " +
+    logger.error("Warning: PeerServer will not run because either " +
       "the key or the certificate has not been provided.");
     process.exit(1);
   }
@@ -102,14 +149,14 @@ const server = PeerServer(opts, server => {
   const host = server.address().address;
   const port = server.address().port;
 
-  console.log(
+  logger.info(
     "Started PeerServer on %s, port: %s, path: %s (v. %s)",
     host, port, userPath || "/", version
   );
 
   const shutdownApp = () => {
     server.close(() => {
-      console.log('Http server closed.');
+      logger.info('Http server closed.');
 
       process.exit(0);
     });
@@ -120,9 +167,9 @@ const server = PeerServer(opts, server => {
 });
 
 server.on("connection", client => {
-  console.log(`Client connected: ${client.getId()}`);
+  logger.info(`Client connected: ${client.getId()}`);
 });
 
 server.on("disconnect", client => {
-  console.log(`Client disconnected: ${client.getId()}`);
+  logger.info(`Client disconnected: ${client.getId()}`);
 });
