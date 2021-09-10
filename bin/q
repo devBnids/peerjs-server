@@ -1,0 +1,12 @@
+
+[Unit]
+Description=peerjs
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bnids/peerjs-server/bin/peerjs --port 9000 --key peerjs --path /myapp
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
