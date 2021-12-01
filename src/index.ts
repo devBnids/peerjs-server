@@ -6,6 +6,8 @@ import { Server } from "net";
 import defaultConfig, { IConfig } from "./config";
 import { createInstance } from "./instance";
 
+import { socketConnection } from "./socket"
+
 type Optional<T> = {
   [P in keyof T]?: (T[P] | undefined);
 };
@@ -59,7 +61,9 @@ function PeerServer(options: Optional<IConfig> = {}, callback?: (server: Server)
   const peerjs = ExpressPeerServer(server, newOptions);
   app.use(peerjs);
 
-  server.listen(port, host, () => callback?.(server));
+  const liteningServer = server.listen(port, host, () => callback?.(server));
+
+  socketConnection(liteningServer);
 
   return peerjs;
 }
