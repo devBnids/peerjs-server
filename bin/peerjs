@@ -150,10 +150,7 @@ const server = PeerServer(opts, server => {
   const host = server.address().address;
   const port = server.address().port;
 
-  logger.info(
-    "Started PeerServer on %s, port: %s, path: %s (v. %s)",
-    host, port, userPath || "/", version
-  );
+  logger.info(`Started PeerServer on ${host}, port: ${port}, path: ${userPath || "/"} (v. ${version})`);
 
   const shutdownApp = () => {
     server.close(() => {
