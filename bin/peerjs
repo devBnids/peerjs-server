@@ -86,12 +86,12 @@ const opts = yargs
     sslkey: {
       demandOption: false,
       describe: "path to SSL key",    
-      default: "/usr/local/bnids/cert/_wildcard_.hparking.co.kr_201911276PT6.key.pem"
+      default: "/usr/local/bnids/cert/hparking.co.kr.key.pem"
     },
     sslcert: {
       demandOption: false,
       describe: "path to SSL certificate",
-      default: "/usr/local/bnids/cert/_wildcard_.hparking.co.kr_201911276PT6.crt.pem",
+      default: "/usr/local/bnids/cert/hparking.co.kr.crt.pem",
     },
     host: {
       demandOption: false,
