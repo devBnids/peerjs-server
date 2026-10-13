@@ -18,8 +18,11 @@ TS=${PEERJS_INSTALL_TS:-$(date +%Y%m%d-%H%M%S)}
 BK=/usr/local/bnids/backup/peerjs-$TS
 S="sudo -n"
 
-# ssh 가 끊겨도 중간에 죽지 않게 자기 자신을 nohup 으로 다시 띄우고 끝날 때까지 기다린다
-if [ -z "${PEERJS_INSTALL_INNER:-}" ]; then
+MODE=install
+[ "${2:-}" = "--check" ] && MODE=check
+
+# ssh 가 끊겨도 중간에 죽지 않게 자기 자신을 nohup 으로 다시 띄우고 끝날 때까지 기다린다(--check 는 바로 돈다)
+if [ $MODE = install ] && [ -z "${PEERJS_INSTALL_INNER:-}" ]; then
   $S true 2>/dev/null || { echo "peerjs-install result=FAIL step=preflight sudo"; exit 1; }
   $S mkdir -p "$BK" && $S chown "$(id -un)" "$BK" || { echo "peerjs-install result=FAIL step=preflight backup-dir"; exit 1; }
   PEERJS_INSTALL_INNER=1 PEERJS_INSTALL_TS=$TS nohup bash "$0" "$@" >"$BK/install.log" 2>&1 </dev/null
@@ -35,7 +38,16 @@ say() { echo "peerjs-install $*"; }
 fail() { say "result=FAIL step=$1 ${2:-} backup=$BK"; exit 1; }
 
 [ -r "$BUNDLE" ] || fail preflight "bundle"
-NODE=$(command -v node) || fail preflight "node"
+# node 찾기 — nvm 으로만 깔린 현장은 비대화형 ssh 의 PATH 에 node 가 없다
+NODE=$(command -v node 2>/dev/null)
+if [ -z "$NODE" ]; then
+  for p in $(pgrep -x node); do
+    tr '\0' ' ' </proc/$p/cmdline 2>/dev/null | grep -q 'bin/peerjs --port' && { NODE=$($S readlink -f /proc/$p/exe); break; }
+  done
+fi
+[ -z "$NODE" ] && NODE=$(ls -d /home/*/.nvm/versions/node/*/bin/node /root/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)
+[ -z "$NODE" ] && [ -x /usr/local/bin/node ] && NODE=/usr/local/bin/node
+[ -n "$NODE" ] && [ -x "$NODE" ] || fail preflight "node"
 
 D=""
 for d in /usr/local/bnids/encrypted/git/peerjs-server /usr/local/bnids/peerjs-server; do
@@ -52,16 +64,39 @@ probe_direct() {
   o=$(curl -sk -m 2 https://127.0.0.1:9000/myapp/ 2>/dev/null); [[ $o == *PeerJS* ]]   # 옛 판(TLS) 되돌림 확인용
 }
 probe_nginx() { local o; o=$(curl -sk -m 3 https://127.0.0.1/webrtc/ 2>/dev/null); [[ $o == *PeerJS* ]]; }
-PM2_RUN=0
-command -v pm2 >/dev/null && [ "$(pm2 pid run 2>/dev/null | tr -cd 0-9)" -gt 0 ] 2>/dev/null && PM2_RUN=1
-PM2_HAS_RUN=0
-command -v pm2 >/dev/null && pm2 jlist 2>/dev/null | grep -q '"name":"run"' && PM2_HAS_RUN=1
+# pm2 는 데몬이 떠 있을 때만 묻는다 — 데몬이 없을 때 pm2 명령을 치면 빈 데몬이 새로 뜬다
+PM2_LIVE=0; PM2_RUN=0; PM2_HAS_RUN=0
+pm2_daemon() { ps -u "$(id -un)" -o args= 2>/dev/null | grep -q '^PM2 v'; }
+if command -v pm2 >/dev/null; then
+  pm2_daemon && PM2_LIVE=1
+  if [ $PM2_LIVE = 1 ]; then
+    rp=$(pm2 pid run 2>/dev/null | tail -1)
+    [[ $rp =~ ^[0-9]+$ ]] && [ "$rp" -gt 0 ] && PM2_RUN=1
+    pm2 jlist 2>/dev/null | grep -q '"name":"run"' && PM2_HAS_RUN=1
+  fi
+  # 데몬이 없어도 dump 에 run 이 남아 있으면 부팅 때 되살아난다
+  grep -q '"name":"run"' "${PM2_HOME:-$HOME/.pm2}/dump.pm2" 2>/dev/null && PM2_HAS_RUN=1
+fi
 WAS_RUNNING=0; { [ -n "$(pids)" ] || [ $PM2_RUN = 1 ]; } && WAS_RUNNING=1
 UNIT_ENABLED=$(systemctl is-enabled peerjs 2>/dev/null || true)
 NGINX_BEFORE=0; probe_nginx && NGINX_BEFORE=1
 OLD_VER=$(cat "$D/VERSION" 2>/dev/null || md5sum "$D/bin/peerjs" 2>/dev/null | cut -c1-8)
 START=$(( WAS_RUNNING || ENABLE ))
-say "state dir=$D fresh=$FRESH running=$WAS_RUNNING pm2_run=$PM2_RUN unit=$UNIT_ENABLED nginx_ok=$NGINX_BEFORE old=$OLD_VER"
+say "state dir=$D fresh=$FRESH running=$WAS_RUNNING pm2_run=$PM2_RUN unit=$UNIT_ENABLED nginx_ok=$NGINX_BEFORE old=$OLD_VER node=$($NODE -v)"
+
+if [ $MODE = check ]; then
+  # 바꾸지 않고 검사만: 묶음을 이 현장의 node 로 로드해 보고, nginx 를 고친 사본으로 문법 검사
+  CK=$(mktemp -d)
+  tar xzf "$BUNDLE" -C "$CK" --no-same-owner 2>/dev/null || { rm -rf "$CK"; fail check-extract; }
+  "$NODE" -e 'new (require("vm").Script)(require("fs").readFileSync(process.argv[1], "utf8").replace(/^#!.*/, ""))' "$CK/bin/peerjs" >/dev/null 2>&1 \
+    && (cd "$CK" && "$NODE" -e 'require("./dist/src"); require("./bin/client-log"); require("winston"); require("winston-daily-rotate-file"); require("yargs")') >/dev/null 2>&1 \
+    || { rm -rf "$CK"; fail check-bundle "node $($NODE -v)"; }
+  PJ=$( (cd "$CK" && PEERJS_LOG_DIR="$CK/log" timeout 5 "$NODE" bin/peerjs --port 9199 --path /myapp >/dev/null 2>&1 & bp=$!; sleep 2; o=$(curl -s -m 2 http://127.0.0.1:9199/myapp/); kill $bp 2>/dev/null; wait $bp 2>/dev/null; [[ $o == *PeerJS* ]] && echo ok || echo fail) )
+  rm -rf "$CK"
+  [ "$PJ" = ok ] || fail check-run "node $($NODE -v)"
+  say "result=CHECK-OK dir=$D running=$WAS_RUNNING pm2_run=$PM2_RUN unit=$UNIT_ENABLED nginx_ok=$NGINX_BEFORE https9000_files=$($S grep -lE 'proxy_pass[[:space:]]+https://[^;[:space:]]+:9000' /etc/nginx/conf.d/*.conf /etc/nginx/sites-enabled/* 2>/dev/null | wc -l) node=$($NODE -v) old=$OLD_VER"
+  exit 0
+fi
 
 # 백업
 if [ $FRESH = 0 ]; then
@@ -180,17 +215,23 @@ if [ $START = 1 ]; then
 fi
 trap - HUP INT TERM
 
-# pm2 정리(성공한 뒤에만)
+# pm2 정리(성공한 뒤에만). run 을 지우고, 앱이 하나도 안 남은 데몬은 끄고 부팅 등록도 푼다
 PM2_STATE=none
-if [ $PM2_HAS_RUN = 1 ]; then
-  pm2 delete run >/dev/null 2>&1
-  pm2 save --force >/dev/null 2>&1
-  if [ -z "$(pm2 jlist 2>/dev/null | grep -o '"name":"[^"]*"' | grep -v pm2-logrotate)" ]; then
-    $S systemctl disable "pm2-$(id -un)" >/dev/null 2>&1
-    pm2 kill >/dev/null 2>&1
-    PM2_STATE=removed
-  else
-    PM2_STATE=kept-other-apps
+if command -v pm2 >/dev/null; then
+  if [ $PM2_HAS_RUN = 1 ]; then
+    pm2 delete run >/dev/null 2>&1
+    pm2 save --force >/dev/null 2>&1
+    PM2_STATE=run-deleted
+  fi
+  if pm2_daemon; then
+    others=$( { pm2 jlist 2>/dev/null; cat "${PM2_HOME:-$HOME/.pm2}/dump.pm2" 2>/dev/null; } | grep -o '"name":"[^"]*"' | grep -v -e pm2-logrotate -e '"name":"run"' | sort -u)
+    if [ -z "$others" ]; then
+      $S systemctl disable "pm2-$(id -un)" >/dev/null 2>&1
+      pm2 kill >/dev/null 2>&1
+      PM2_STATE=removed
+    else
+      PM2_STATE=kept-other-apps
+    fi
   fi
 fi
 
