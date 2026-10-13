@@ -47,6 +47,9 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
   }
 
   private _onSocketConnection(socket: MyWebSocket, req: IncomingMessage): void {
+    // 소켓 하나의 오류(깨진 프레임·연결 리셋)가 처리기 없는 'error' 로 던져져 서버 전체를 내리지 않게 한다
+    socket.on("error", (error: Error) => this.emit("error", error));
+
     const { query = {} } = url.parse(req.url ?? '', true);
 
     const { id, token, key }: IAuthParams = query;

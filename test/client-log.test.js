@@ -19,7 +19,7 @@ assert.strictEqual(out.length, 2 + 6);
 cl.flush(); assert.strictEqual(out.length, 8);           // 창이 안 끝났으면 요약 없음
 t = 600000; cl.flush();
 assert.strictEqual(out.length, 9);
-assert.match(out[8], /^Client 17336-220702-1-<viewer>: repeated, omitted connected 97, disconnected 97 in last 10m$/);
+assert.match(out[8], /^Client 17336-220702-1-<viewer>: repeated, omitted connected 97, disconnected 97 in last 10m; last disconnected 17336-220702-1-00000099-1b2c-4d3e-8f90-a1b2c3d4e5f6 at \d\d:\d\d:\d\d$/);
 assert.strictEqual(cl.size(), 0);                        // 창이 끝나면 비워진다
 cl.event("connected", "17336-220702-1"); assert.strictEqual(out.length, 10); // 새 창은 다시 그대로
 cl.flush(true); assert.strictEqual(out.length, 10);      // 넘친 게 없으면 요약 없음

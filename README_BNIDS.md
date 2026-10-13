@@ -80,15 +80,20 @@ ssh <현장> 'bash /tmp/install.sh /tmp/peerjs-bundle-<커밋>.tgz'   # --enable
 sed -i -E 's#(proxy_pass[[:space:]]+)https://(gate\.local\.happyparking\.co\.kr):9000#\1http://\2:9000#g' default.conf
 ```
 
-### 12 리허설 (2026-10-13)
+### 12 리허설 (2026-10-13, 최종 스크립트)
 
-| 시나리오 | 결과 |
-|---|---|
-| systemd 로 돌던 현장 | OK, nginx(https)→peerjs(http) 응답·실제 송출 장치 재접속, 저널 0줄 |
-| 재설치(멱등) | OK, 4초 |
-| 꺼져 있던 현장 / `--enable` | 꺼진 채 유지 / 켜짐 |
-| 고장 난 묶음 | `FAIL step=start rolled-back` → 이전 판 복원·정상 응답 |
-| 수락리버시티형(옛 TLS 판을 pm2 가 돌리고 systemd 는 포트 못 잡은 채 중복, nginx https) | OK 8초 — 프로세스 1개·pm2 부팅 해제·nginx http |
+| # | 시나리오 | 결과 |
+|---|---|---|
+| R1 | systemd 로 돌던 현장 재설치 | OK 6초, nginx 경유 확인 ok |
+| R3 | 꺼져 있던 현장 / `--enable` | 꺼진 채 유지 / 켜짐 |
+| R4 | 문법이 깨진 묶음 | `FAIL step=bundle-check` — 교체 전에 걸러져 서비스 무변경 |
+| R5 | 수락리버시티형(옛 TLS 판을 pm2 가 돌리고 systemd 는 포트 못 잡은 채 중복, nginx https) | OK 9초 — 프로세스 1개·pm2 부팅 해제·데몬 종료·nginx http |
+| R6 | 설치 도중 ssh 강제 종료 | 끝까지 완료(OK) — nohup |
+| R7 | 기동 직후 죽는 판 | `FAIL step=start rolled-back=up` — 이전 판 응답 |
+| R8 | 깨진 JSON·깨진 프레임·업그레이드 도중 리셋 | 같은 PID 유지·재시작 0, `warn: Client error` 기록만 |
+| R9 | 설치 도중 SIGTERM | `FAIL step=interrupted rolled-back=up` |
+
+끊김 검사 주기 A/B(빈 서버 2분): 300ms 23틱·깨어남 564회 → 5초 11틱·204회 (CPU −52%, 깨어남 −64%).
 
 ---
 

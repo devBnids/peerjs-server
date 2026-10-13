@@ -27,6 +27,7 @@ const logFormat = printf(info => {
  * Log Level
  * error: 0, warn: 1, info: 2, http: 3, verbose: 4, debug: 5, silly: 6
  */
+let fileTransport;
 const logger = winston.createLogger({
   format: combine(
     timestamp({
@@ -35,7 +36,7 @@ const logger = winston.createLogger({
     logFormat,
   ),
   transports: [
-    new winstonDaily({
+    fileTransport = new winstonDaily({
       level: 'info',
       name: 'info',
       filename: `peerjs-server-%DATE%.log`,
@@ -132,9 +133,19 @@ const opts = yargs
   .argv;
 
 // 삼키지 않고 죽는다. 포트 충돌·치명 오류 뒤에 듣지도 않는 프로세스가 남으면 systemd 가 되살리지 못한다.
+// 파일 transport 는 비동기다. 바로 exit 하면 마지막 줄(치명 오류·종료 요약)이 사라진다 — 다 쓰고 나간다
+let exiting = false;
+const exitAfterLog = (code) => {
+  if (exiting) return;
+  exiting = true;
+  fileTransport.on("finish", () => process.exit(code));
+  logger.end();
+  setTimeout(() => process.exit(code), 2000).unref();
+};
 const die = (e) => {
+  if (exiting) return process.exit(1);
   logger.error("Fatal: " + (e && e.stack || e));
-  setTimeout(() => process.exit(1), 300);
+  exitAfterLog(1);
 };
 process.on("uncaughtException", die);
 process.on("unhandledRejection", die);
@@ -168,10 +179,10 @@ const server = PeerServer(opts, server => {
     clientLog.flush(true);
     server.close(() => {
       logger.info('Http server closed.');
-      process.exit(0);
+      exitAfterLog(0);
     });
     // 열린 웹소켓이 남아 있으면 close 가 끝나지 않는다(systemd 정지 90초 대기). 3초 뒤 정리한다
-    setTimeout(() => process.exit(0), 3000).unref();
+    setTimeout(() => { logger.info('Closing with open sockets.'); exitAfterLog(0); }, 3000).unref();
   };
 
   process.on('SIGINT', shutdownApp);
@@ -188,4 +199,9 @@ server.on("connection", client => {
 
 server.on("disconnect", client => {
   clientLog.event("disconnected", client.getId());
+});
+
+// 클라이언트 하나의 잘못(깨진 메시지·소켓 오류)은 기록만 한다. 처리기가 없으면 EventEmitter 가 던져 서버가 내려간다
+server.on("error", e => {
+  logger.warn("Client error: " + (e && e.message || e));
 });

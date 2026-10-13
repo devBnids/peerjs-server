@@ -24,6 +24,8 @@ class WebSocketServer extends events_1.default {
     }
     _onSocketConnection(socket, req) {
         var _a;
+        // 소켓 하나의 오류(깨진 프레임·연결 리셋)가 처리기 없는 'error' 로 던져져 서버 전체를 내리지 않게 한다
+        socket.on("error", (error) => this.emit("error", error));
         const { query = {} } = url_1.default.parse((_a = req.url) !== null && _a !== void 0 ? _a : '', true);
         const { id, token, key } = query;
         if (!id || !token || !key) {

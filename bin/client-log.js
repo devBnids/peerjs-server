@@ -10,6 +10,11 @@ function clientKey(id) {
   return UUID_SUFFIX.test(id) ? id.replace(UUID_SUFFIX, "-<viewer>") : id;
 }
 
+function hhmmss(t) {
+  const d = new Date(t);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, "0")).join(":");
+}
+
 function createClientLog(log, { windowMs = 10 * 60 * 1000, limit = 3, now = Date.now } = {}) {
   const windows = new Map(); // key -> { since, counts: {kind: n}, dropped: {kind: n} }
 
@@ -17,7 +22,7 @@ function createClientLog(log, { windowMs = 10 * 60 * 1000, limit = 3, now = Date
     const key = clientKey(id);
     let w = windows.get(key);
     if (!w) {
-      w = { since: now(), counts: {}, dropped: {} };
+      w = { since: now(), counts: {}, dropped: {}, last: null };
       windows.set(key, w);
     }
     w.counts[kind] = (w.counts[kind] || 0) + 1;
@@ -25,6 +30,7 @@ function createClientLog(log, { windowMs = 10 * 60 * 1000, limit = 3, now = Date
       log(`Client ${kind}: ${id}`);
     } else {
       w.dropped[kind] = (w.dropped[kind] || 0) + 1;
+      w.last = { kind, id, at: now() }; // 묶인 동안의 마지막 상태(언제 죽었나)를 요약에 남긴다
     }
   }
 
@@ -35,7 +41,8 @@ function createClientLog(log, { windowMs = 10 * 60 * 1000, limit = 3, now = Date
       const dropped = Object.entries(w.dropped).map(([k, n]) => `${k} ${n}`);
       if (dropped.length) {
         const mins = Math.max(1, Math.round((t - w.since) / 60000));
-        log(`Client ${key}: repeated, omitted ${dropped.join(", ")} in last ${mins}m`);
+        const last = w.last ? `; last ${w.last.kind} ${w.last.id} at ${hhmmss(w.last.at)}` : "";
+        log(`Client ${key}: repeated, omitted ${dropped.join(", ")} in last ${mins}m${last}`);
       }
       windows.delete(key);
     }
