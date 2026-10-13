@@ -8,6 +8,7 @@ const optimistUsageLength = 98;
 const yargs = require("yargs");
 const version = pkg.version;
 const { PeerServer } = require("../dist/src");
+const { createClientLog } = require("./client-log");
 // const tools = require('../config/winston.mjs');
 
 const winston = require("winston");
@@ -46,8 +47,10 @@ const logger = winston.createLogger({
   ],
 });
 
-// Production 환경이 아닌 경우(dev 등) 
-if (process.env.NODE_ENV !== 'production') {
+// 터미널에서 직접 띄울 때만 콘솔에도 찍는다.
+// pm2·systemd 아래에서는 stdout 이 회전 없는 pm2 로그·저널로 그대로 복제돼 수 GB 씩 쌓였다(2026-10-13).
+// 파일 로그(위, 30일 보관)가 정본이다. 꼭 콘솔이 필요하면 PEERJS_CONSOLE=1.
+if (process.stdout.isTTY || process.env.PEERJS_CONSOLE === '1') {
   logger.add(new winston.transports.Console({
     format: winston.format.combine(
       winston.format.colorize(),  // 색깔 넣어서 출력
@@ -153,6 +156,7 @@ const server = PeerServer(opts, server => {
   logger.info(`Started PeerServer on ${host}, port: ${port}, path: ${userPath || "/"} (v. ${version})`);
 
   const shutdownApp = () => {
+    clientLog.flush(true);
     server.close(() => {
       logger.info('Http server closed.');
 
@@ -164,10 +168,14 @@ const server = PeerServer(opts, server => {
   process.on('SIGTERM', shutdownApp);
 });
 
+// 같은 통로의 재접속 반복은 10분에 3번까지만 그대로, 나머지는 요약 한 줄로 남긴다
+const clientLog = createClientLog(msg => logger.info(msg));
+setInterval(() => clientLog.flush(), 60 * 1000).unref();
+
 server.on("connection", client => {
-  logger.info(`Client connected: ${client.getId()}`);
+  clientLog.event("connected", client.getId());
 });
 
 server.on("disconnect", client => {
-  logger.info(`Client disconnected: ${client.getId()}`);
+  clientLog.event("disconnected", client.getId());
 });
