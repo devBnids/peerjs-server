@@ -14,7 +14,7 @@ const { createClientLog } = require("./client-log");
 const winston = require("winston");
 const winstonDaily = require("winston-daily-rotate-file");
 
-const logDir = '/usr/local/bnids/logs';  // logs 디렉토리 하위에 로그 파일 저장
+const logDir = process.env.PEERJS_LOG_DIR || '/usr/local/bnids/logs';  // 로그 파일 위치(시험 때만 바꾼다)
 const { combine, timestamp, printf } = winston.format;
 
 // Define log format
@@ -80,26 +80,33 @@ const opts = yargs
       describe: "broken connection check timeout (milliseconds)",
       default: 60000
     },
+    check_interval: {
+      demandOption: false,
+      describe: "broken connection check interval (milliseconds)",
+      // upstream 은 300ms 다. 끊김 판정이 alive_timeout(60초) 단위라 5초면 충분하고 깨어남이 1/16 로 준다
+      default: 5000
+    },
     key: {
       demandOption: false,
       alias: "k",
       describe: "connection key",
       default: "peerjs"
     },
+    // TLS 는 nginx 가 끝낸다. peerjs 는 루프백 평문으로만 듣는다 — 인증서 만료가 peerjs 재시작을 막지 않게.
+    // 꼭 TLS 로 직접 받아야 하면 --sslkey/--sslcert 를 둘 다 준다.
     sslkey: {
       demandOption: false,
-      describe: "path to SSL key",    
-      default: "/usr/local/bnids/cert/hparking.co.kr.key.pem"
+      describe: "path to SSL key"
     },
     sslcert: {
       demandOption: false,
-      describe: "path to SSL certificate",
-      default: "/usr/local/bnids/cert/hparking.co.kr.crt.pem",
+      describe: "path to SSL certificate"
     },
     host: {
       demandOption: false,
       alias: "H",
-      describe: "host"
+      describe: "host",
+      default: "127.0.0.1"
     },
     port: {
       demandOption: true,
@@ -124,9 +131,13 @@ const opts = yargs
   .boolean("allow_discovery")
   .argv;
 
-process.on("uncaughtException", function (e) {
-  logger.error("Error: " + e);
-});
+// 삼키지 않고 죽는다. 포트 충돌·치명 오류 뒤에 듣지도 않는 프로세스가 남으면 systemd 가 되살리지 못한다.
+const die = (e) => {
+  logger.error("Fatal: " + (e && e.stack || e));
+  setTimeout(() => process.exit(1), 300);
+};
+process.on("uncaughtException", die);
+process.on("unhandledRejection", die);
 
 if (opts.sslkey || opts.sslcert) {
   if (opts.sslkey && opts.sslcert) {
@@ -135,9 +146,7 @@ if (opts.sslkey || opts.sslcert) {
       cert: fs.readFileSync(path.resolve(opts.sslcert))
     };
 
-    logger.info("ssl 정보 불러오기 성공!!! ");
-    logger.info(`---> opts.sslkey ${opts.sslkey}`);
-    logger.info(`---> opts.sslcert ${opts.sslcert}`);
+    logger.info(`ssl: key ${opts.sslkey}, cert ${opts.sslcert}`);
 
     delete opts.sslkey;
     delete opts.sslcert;
@@ -153,15 +162,16 @@ const server = PeerServer(opts, server => {
   const host = server.address().address;
   const port = server.address().port;
 
-  logger.info(`Started PeerServer on ${host}, port: ${port}, path: ${userPath || "/"} (v. ${version})`);
+  logger.info(`Started PeerServer on ${host}, port: ${port}, path: ${userPath || "/"}, ${opts.ssl ? "https" : "http"} (v. ${version})`);
 
   const shutdownApp = () => {
     clientLog.flush(true);
     server.close(() => {
       logger.info('Http server closed.');
-
       process.exit(0);
     });
+    // 열린 웹소켓이 남아 있으면 close 가 끝나지 않는다(systemd 정지 90초 대기). 3초 뒤 정리한다
+    setTimeout(() => process.exit(0), 3000).unref();
   };
 
   process.on('SIGINT', shutdownApp);

@@ -3,6 +3,7 @@ export interface IConfig {
   readonly port: number;
   readonly expire_timeout: number;
   readonly alive_timeout: number;
+  readonly check_interval: number;
   readonly key: string;
   readonly path: string;
   readonly concurrent_limit: number;
@@ -21,6 +22,7 @@ const defaultConfig: IConfig = {
   port: 9000,
   expire_timeout: 5000,
   alive_timeout: 60000,
+  check_interval: 5000,
   key: "peerjs",
   path: "/",
   concurrent_limit: 5000,

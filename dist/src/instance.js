@@ -20,6 +20,7 @@ const createInstance = ({ app, server, options }) => {
     const checkBrokenConnections = new checkBrokenConnections_1.CheckBrokenConnections({
         realm,
         config,
+        checkInterval: config.check_interval,
         onClose: client => {
             app.emit("disconnect", client);
         }

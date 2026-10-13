@@ -8,7 +8,7 @@ const PORT = '9000';
 
 async function makeRequest() {
   return new Promise<object>((resolve, reject) => {
-    http.get(`http://localhost:${PORT}/`, resp => {
+    http.get(`http://127.0.0.1:${PORT}/`, resp => {
       let data = '';
 
       resp.on('data', chunk => {
@@ -35,7 +35,7 @@ describe('Check bin/peerjs', () => {
       rejecter = reject;
     });
 
-    const ls = spawn('node', [path.join(__dirname, '../', 'bin/peerjs'), '--port', PORT]);
+    const ls = spawn('node', [path.join(__dirname, '../', 'bin/peerjs'), '--port', PORT], { env: { ...process.env, PEERJS_LOG_DIR: path.join(require('os').tmpdir(), 'peerjs-test-log'), PEERJS_CONSOLE: '1' } });
 
     ls.stdout.on('data', async (data: string) => {
       if (!data.includes('Started')) return;
