@@ -24,3 +24,61 @@
 - 설치 안 된 현장(미도달 등)에는 nginx 를 보내지 않는다 — http nginx ↔ 옛 TLS peerjs 로 실시간이 끊긴다.
   이후 그 현장에 nginx 를 배포하려면 peerjs 설치(`install.sh`)가 먼저다.
 - 되돌리기: 현장 `/usr/local/bnids/backup/peerjs-<시각>/`(tree.tgz·peerjs.service·nginx 사본), nginx 는 sonamu 백업 `default.conf.YYYYMMDD`.
+
+## 실행 결과 (2026-10-13 21:59~22:20, 사용자 지시로 23시에서 앞당김)
+
+| 단계 | 결과 |
+|---|---|
+| peerjs 설치 | OK 463(실행 339·꺼짐 유지 124) · 실패 1(bn200408 node 없음) · 미도달 43 |
+| gitea nginx | 8b2fb4f push (md5 d80794a2) |
+| sonamu nginx | 459곳 성공 459 / 실패 0 (리포트 lab ~/.sonamu-deploy/reports/20261013-220658_nginx_459sites.txt) |
+| bn260801(lab 목록 밖) | gitea 판 직접 적용, 백업 default.conf.20261013 |
+| 점검 | 462곳 default.conf=d80794a2·nginx active, peerjs active 338(+12)·127.0.0.1:9000, 동시 접속 1,962(전 1,994), 외부 :9443/webrtc 338/339 — 실패 1은 설치 전부터 오프라인인 bn230607 |
+
+### 미도달 43곳 — 옛 상태(옛 TLS peerjs + https nginx). **nginx 배포 전에 install.sh 먼저**
+
+```
+00000-000000	localserver.hparking.co.kr	BNIDS-Master (IP:11)
+01775-201102	bn201102.hparking.co.kr	Y20N100.[V3](V1) 서울 노원 하계 학여울청
+02007-210109	bn210109.hparking.co.kr	중랑 묵동아이파크
+04419-201205	bn201205.hparking.co.kr	한남리첸시아
+04709-261001	bn261001.hparking.co.kr	성동삼성쉐르빌
+04718-211001	bn211001.hparking.co.kr	성동 금호삼성레미안
+04734-221204	bn221204.hparking.co.kr	성동구 옥수삼성아파트
+05267-210105	bn210105.hparking.co.kr	AS-셋팅서버-Ultra5
+07258-191207	bn191207.hparking.co.kr	Y19N025.[V2] 서울 영등포 당산동부센트레빌_2
+07270-200302	bn200302.hparking.co.kr	비엔인더스트리
+07270-210105	bn210105.hparking.co.kr	rkd동 명일삼익그린2차_AS
+07270-210111	bn210111.hparking.co.kr	현장팀용 통합서버
+07270-210700	bn210700.hparking.co.kr	KC인증용통합서버
+08734-191210	bn191210.hparking.co.kr	Y19N028.[V2.x] 서울 관악 관악푸르지오_**
+08777-200712	lab.hparking.co.kr	BN연구소172_12_ext
+08777-210711	localserver21.hparking.co.kr	BNIDS-BNI연구소21 - 개발서버
+10068-201207	bn201207.hparking.co.kr	김포 은여울 경남아너스빌
+10234-221005	bn221005.hparking.co.kr	일산 아이파크5단지
+10448-210705	bn210705.hparking.co.kr	흰돌마을 3단지
+10551-210806	bn210806.hparking.co.kr	Y21N175.[V2.x](V1) 경기 고양 원흥도래울
+10551-211203	bn211203.hparking.co.kr	Y21N208.[V3.5] 경기 고양 도래울파크뷰6단지
+11914-210302	bn210302.hparking.co.kr	일신건영1차 아파트
+11914-250305	bn250305.hparking.co.kr	아름마을일신건영1차 아파트
+11919-220903	bn220903.hparking.co.kr	구리인창아름마을원일(종료)
+12069-220102	bn220102.hparking.co.kr	진접부영사랑으로
+12774-200907	bn200907.hparking.co.kr	Y20N090.[V2](V1) 경기 광주 오포 우림 퓨
+13165-200906	bn200906.hparking.co.kr	성남 래미안 금광아파트
+13436-210502	bn210502.hparking.co.kr	Y21N150.[V2](V1) 경기 성남 센트럴타운3단
+13973-260901	bn260901.hparking.co.kr	석수아이파크
+14068-211204	bn211204.hparking.co.kr	안양 초원세경
+14293-210404	bn210404.hparking.co.kr	Y21N148.[V2](V1) 경기 광명 현진에버빌_2
+15381-191008	bn191008.hparking.co.kr	원곡 벽산블루밍
+15539-210903	bn210903.hparking.co.kr	안산 본오동태영
+16513-210103	bn210103.hparking.co.kr	광교레이크파크한양수자인
+16836-230802	bn230802.hparking.co.kr	용인신정마을주공1단지
+16963-201005	bn201005.hparking.co.kr	용인 기흥 가현마을 신안아파트
+17091-230607	bn230607.hparking.co.kr	Y23N308.[V3.5Gx] 경기 용인 삼현마을진우_
+17931-230203	bn230203.hparking.co.kr	Y23N286.[V3.5x](V1) 경기 평택 이화마을
+18109-200506	bn200506.hparking.co.kr	세교데시앙포레
+18151-200402	bn200402.hparking.co.kr	오산자이 아파트
+21973-200901	bn200901.hparking.co.kr	인천 연수 한양2차
+21997-191004	bn191004.hparking.co.kr	송도더샵 퍼스트월드
+22631-260604	bn260604.hparking.co.kr	Y26N488.[V3.5Cx] 삼보해피하임2단지_29.
+```
