@@ -38,15 +38,25 @@ say() { echo "peerjs-install $*"; }
 fail() { say "result=FAIL step=$1 ${2:-} backup=$BK"; exit 1; }
 
 [ -r "$BUNDLE" ] || fail preflight "bundle"
-# node 찾기 — nvm 으로만 깔린 현장은 비대화형 ssh 의 PATH 에 node 가 없다
-NODE=$(command -v node 2>/dev/null)
-if [ -z "$NODE" ]; then
-  for p in $(pgrep -x node); do
-    tr '\0' ' ' </proc/$p/cmdline 2>/dev/null | grep -q 'bin/peerjs --port' && { NODE=$($S readlink -f /proc/$p/exe); break; }
+# node 찾기 — nvm 으로만 깔린 현장은 비대화형 ssh 의 PATH 에 node 가 없고, 반대로 .bashrc 가 nvm 을 PATH 앞에
+# 올려 두는데 그 node 가 이 OS 에서 안 뜨는 현장도 있다(사내 21: CentOS 7 glibc 2.17 + nvm v18 → GLIBC_2.27 없음,
+# 2026-10-17 bundle-check 실패). 그래서 "경로에 있다" 가 아니라 **실제로 `-v` 가 도는 첫 node** 를 고른다.
+# 순서: 지금 peerjs 를 돌리는 node(검증된 것) → PATH 의 node → 시스템 node → nvm 최신순.
+node_candidates() {
+  local p
+  for p in /proc/[0-9]*; do
+    tr '\0' ' ' <$p/cmdline 2>/dev/null | grep -q 'bin/peerjs --port' && { $S readlink -f $p/exe 2>/dev/null; }
   done
-fi
-[ -z "$NODE" ] && NODE=$(ls -d /home/*/.nvm/versions/node/*/bin/node /root/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)
-[ -z "$NODE" ] && [ -x /usr/local/bin/node ] && NODE=/usr/local/bin/node
+  command -v node 2>/dev/null
+  printf '%s\n' /usr/bin/node /usr/local/bin/node /bin/node
+  ls -d /home/*/.nvm/versions/node/*/bin/node /root/.nvm/versions/node/*/bin/node 2>/dev/null | sort -Vr
+}
+NODE=
+for n in $(node_candidates | awk 'NF && !seen[$0]++'); do
+  [ -x "$n" ] || continue
+  v=$("$n" -v 2>/dev/null) || continue
+  case "$v" in v[0-9]*) NODE=$n; break ;; esac
+done
 [ -n "$NODE" ] && [ -x "$NODE" ] || fail preflight "node"
 
 D=""
