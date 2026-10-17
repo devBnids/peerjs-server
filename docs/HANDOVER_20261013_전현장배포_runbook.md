@@ -96,6 +96,7 @@
 | 08777-210711 사내 21(CentOS 7) | 끊김 확인 → **nginx :9000 프록시를 https 로 되돌려 복구**(백업 `default.conf.bak-20261017-peerjs-https`). 통일판 설치는 nvm node v18 이 `GLIBC_2.27` 을 요구해 bundle-check 실패·자동 되돌림 — 시스템 node 로 install.sh 보강 필요 |
 | 04709-261001 성동삼성쉐르빌 | 맥·lab 모두 SSH 키 없음 → sonamu_site `/exec`(사무실 IP 만, lab 에서 호출)로 진단(옛 TLS peerjs active, node 없음, `encrypted/git/peerjs-server`) 후 같은 경로로 **https 되돌림 → 외부 :9443/webrtc 200** |
 
-- 되돌린 2곳(21·261001)은 다시 "옛 TLS peerjs + https nginx" 다. **다음 nginx 배포가 또 http 로 덮는다** — 그 전에 통일판을 깔거나(21: node 경로, 261001: SSH 키 먼저), 배포 대상에서 뺀다.
+- **21 은 23:53 통일판 설치 완료** — install.sh 보강(`a256c27`: 실제로 `-v` 가 도는 첫 node 를 고름) 뒤 `/usr/bin/node v14.17.0` 으로 c679201 기동, 127.0.0.1:9000, nginx http 3줄, 경유 /webrtc 200, pm2 제거, 백업 `peerjs-20261017-235341`. 이제 21 은 다음 nginx 배포에 안전하다.
+- **261001 은 아직 "옛 TLS peerjs + https nginx"** 다. **다음 nginx 배포가 또 http 로 덮는다** — 그 전에 통일판을 깔거나(SSH 키 배포가 먼저, 지금은 /exec 경로만 — 묶음을 올릴 수단이 없다), 배포 대상에서 뺀다.
 - `/exec` 로 보내는 JSON 에 역슬래시(sed `\.`·`\1`)를 넣으면 Flask 가 400 으로 거부해 아무것도 안 돈다 — 점 그대로 쓰는 패턴으로, 보내기 전 `python3 -c json.load` 로 검사한다(1차 시도에서 겪음).
 - 절차 보강: **sonamu `nginx` 전 현장 배포 전에 이 표의 미설치 현장(§미도달 43곳) 가운데 lab 목록에 있는 코드를 `--sites` 로 빼거나 install.sh 를 먼저 돌린다.** 스크립트는 sonamu_site `doc/tools_20261017/` 옆이 아니라 맥 `$CLAUDE_JOB_DIR/tmp/peerjs_fix_20261017.sh`·`peerjs_fix2_261001.sh`(세션 임시) 였다 — 내용은 위 표대로 `sudo cp 백업 → sed https → nginx -t → reload`.
