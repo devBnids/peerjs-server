@@ -82,3 +82,20 @@
 21997-191004	bn191004.hparking.co.kr	송도더샵 퍼스트월드
 22631-260604	bn260604.hparking.co.kr	Y26N488.[V3.5Cx] 삼보해피하임2단지_29.
 ```
+
+
+## 사고 — 2026-10-17 nginx 전 현장 배포가 미설치 현장의 중계를 끊음 (복구 완료 23:3x)
+
+석수 VPN 대역 geo 면제(gitea nginx `0fa3b92`)를 sonamu `nginx` 로 전 현장(470곳)에 배포하면서 위 "설치 안 된 현장에는 nginx 를 보내지 않는다" 를 확인하지 않았다. 8b2fb4f 의 `proxy_pass http` 가 같이 실려 **옛 TLS peerjs 가 남은 현장은 http nginx ↔ TLS peerjs 로 /webrtc 가 502** 가 됐다.
+
+| 43곳 중 | 결과 |
+|---|---|
+| 오늘 nginx 가 실제 들어간 곳 | **4곳**뿐(나머지 38곳은 lab 목록 밖이라 배포 안 감, 석수 260901 은 연결 안됨) |
+| 17091-230607 삼현마을진우 | 23:20 통일판 peerjs 기동됨(다른 lab 세션이 복구한 것으로 보임) → 200 |
+| 08734-191210 관악푸르지오 | peerjs 가 원래 꺼진 현장(배포 전에도 502) → 통일판 c679201 설치, 꺼진 채 유지(회귀 아님) |
+| 08777-210711 사내 21(CentOS 7) | 끊김 확인 → **nginx :9000 프록시를 https 로 되돌려 복구**(백업 `default.conf.bak-20261017-peerjs-https`). 통일판 설치는 nvm node v18 이 `GLIBC_2.27` 을 요구해 bundle-check 실패·자동 되돌림 — 시스템 node 로 install.sh 보강 필요 |
+| 04709-261001 성동삼성쉐르빌 | 맥·lab 모두 SSH 키 없음 → sonamu_site `/exec`(사무실 IP 만, lab 에서 호출)로 진단(옛 TLS peerjs active, node 없음, `encrypted/git/peerjs-server`) 후 같은 경로로 **https 되돌림 → 외부 :9443/webrtc 200** |
+
+- 되돌린 2곳(21·261001)은 다시 "옛 TLS peerjs + https nginx" 다. **다음 nginx 배포가 또 http 로 덮는다** — 그 전에 통일판을 깔거나(21: node 경로, 261001: SSH 키 먼저), 배포 대상에서 뺀다.
+- `/exec` 로 보내는 JSON 에 역슬래시(sed `\.`·`\1`)를 넣으면 Flask 가 400 으로 거부해 아무것도 안 돈다 — 점 그대로 쓰는 패턴으로, 보내기 전 `python3 -c json.load` 로 검사한다(1차 시도에서 겪음).
+- 절차 보강: **sonamu `nginx` 전 현장 배포 전에 이 표의 미설치 현장(§미도달 43곳) 가운데 lab 목록에 있는 코드를 `--sites` 로 빼거나 install.sh 를 먼저 돌린다.** 스크립트는 sonamu_site `doc/tools_20261017/` 옆이 아니라 맥 `$CLAUDE_JOB_DIR/tmp/peerjs_fix_20261017.sh`·`peerjs_fix2_261001.sh`(세션 임시) 였다 — 내용은 위 표대로 `sudo cp 백업 → sed https → nginx -t → reload`.
